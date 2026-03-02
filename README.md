@@ -177,11 +177,11 @@ All addresses are defined as 5-byte arrays. The NRF24L01+ requires exactly 5-byt
 
 ```cpp
 const uint8_t downlinkAddresses[5][6] = {
-  "Ant0D",   // Antenna 0
-  "Ant1D",   // Antenna 1
-  "Ant2D",   // Antenna 2
-  "Ant3D",   // Antenna 3
-  "Ant4D"    // Antenna 4
+  "Ant0A",   // Antenna 0
+  "Ant1A",   // Antenna 1
+  "Ant2A",   // Antenna 2
+  "Ant3A",   // Antenna 3
+  "Ant4A"    // Antenna 4
 };
 ```
 
@@ -190,6 +190,13 @@ Each string is 5 printable characters plus a null terminator (hence `[6]`). The 
 Earth opens its writing pipe to `downlinkAddresses[id]` before each transmission. Each Antenna listens on `downlinkAddresses[ANTENNA_ID]` on pipe 1. The ACK payload travels back through the same pipe automatically — no separate return address is needed.
 
 To distinguish this network from others in the same space, change the address strings consistently across all devices. See [Deploying Multiple Networks](#deploying-multiple-networks).
+
+This repository also includes **10 field configuration headers**, `Field1.h` through `Field10.h`. Each header file defines:
+
+- A complete `downlinkAddresses` array with unique 5-character suffixes (`Ant0A`–`Ant4A`, `Ant0B`–`Ant4B`, …, `Ant0J`–`Ant4J`)
+- A `RADIO_CHANNEL` constant for that field
+
+Both `Earth.ino` and `Antenna.ino` simply `#include` the same `FieldN.h` for a given field so they share an address set and channel.
 
 ---
 
@@ -257,7 +264,7 @@ struct AckPayload {
 |---|---|---|
 | PA Level | `RF24_PA_LOW` | Reduces current draw, more stable without decoupling capacitors |
 | Data Rate | `RF24_250KBPS` | Slowest rate = best sensitivity and link reliability |
-| Channel | 108 | Above the 2.4GHz WiFi band (channels 1–13 = 2.401–2.483GHz) |
+| Channel | `RADIO_CHANNEL` (e.g. 90 in `Field1.h`) | Above the 2.4GHz WiFi band (channels 1–13 = 2.401–2.483GHz). Each `FieldN.h` selects a unique channel. |
 | Retries | 15 delay, 15 count | Maximum hardware auto-retransmit attempts before reporting failure |
 | Payload Size | 32 bytes (fixed) | More stable than dynamic payloads on clone modules |
 | CRC | 16-bit | Strongest built-in error detection |
@@ -317,25 +324,31 @@ The Antenna sketch never calls `radio.write()`, `radio.stopListening()`, or `rad
 
 If two or more Earth/Antenna networks operate in the same physical space, they must use different address sets and different radio channels to avoid interference.
 
+This repository provides **10 ready-to-use field headers**:
+
+- `Field1.h` … `Field10.h` — each defines its own `downlinkAddresses` array and `RADIO_CHANNEL`
+- Address suffixes run from `"Ant0A"`–`"Ant4A"` (Field 1) through `"Ant0J"`–`"Ant4J"` (Field 10)
+- Channels are pre-assigned to non-overlapping values in the upper band (e.g. 90, 95, 100, 105, 108, 110, 115, 120, 122, 125)
+
+To deploy multiple isolated networks, flash each Earth/Antenna pair with the **same** `FieldN.h` included, and use **different** `FieldN.h` values between fields.
+
 ### Step 1 — Change the channel
 
-In both Earth and Antenna sketches, change `radio.setChannel(108)` to a unique value per network. Valid range is 0–125. Suggested values that avoid WiFi overlap: 90, 95, 100, 105, 108.
+In both Earth and Antenna sketches, include the same field header for a given network, for example:
+
+```cpp
+#include "Field1.h"   // Earth.ino
+#include "Field1.h"   // Antenna.ino
+```
+
+`Field1.h`–`Field10.h` already select unique `RADIO_CHANNEL` values. If you need a custom value, edit or copy a `FieldN.h` and change its `RADIO_CHANNEL` constant. Valid range is 0–125. Values in the upper band (around 90–125) avoid most WiFi overlap.
 
 ### Step 2 — Change the addresses
 
-Replace the address strings with a unique 5-character set per network in **both** Earth and Antenna sketches:
+Each `FieldN.h` contains a complete `downlinkAddresses` array. To define your own networks, either:
 
-```cpp
-// Network A
-const uint8_t downlinkAddresses[5][6] = {
-  "A0Dwn", "A1Dwn", "A2Dwn", "A3Dwn", "A4Dwn"
-};
-
-// Network B
-const uint8_t downlinkAddresses[5][6] = {
-  "B0Dwn", "B1Dwn", "B2Dwn", "B3Dwn", "B4Dwn"
-};
-```
+- Reuse one of the provided `FieldN.h` files as-is, or
+- Create a new header by copying an existing `FieldN.h` and replacing the 5-character address strings with your own unique set.
 
 > **Important:** Addresses must be exactly 5 characters. The NRF24L01+ uses 5-byte addressing and the RF24 library reads exactly 5 bytes from the array.
 
