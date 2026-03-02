@@ -431,16 +431,3 @@ Rather than a simple timeout, a consecutive miss counter (`missedPings[id]`) avo
 
 Each Antenna has its own `resetTime[id]` timestamp rather than a global delay. This allows `reset all` to fire quickly across all Antennas in sequence without one slow Antenna blocking the others, while still correctly discarding stale ACK payloads on each individual Antenna independently.
 
----
-
-## Development History
-
-The final architecture was reached after several failed approaches, each revealing a deeper problem with the NRF24L01+ hardware.
-
-**Attempt 1 — Shared address for both directions.** The Antenna used its own pipe address for both receiving commands from Earth and sending messages back. When Earth called `openWritingPipe()` with that address it overwrote pipe 0, destroying its ability to receive ACKs. Every `write()` failed.
-
-**Attempt 2 — Separate uplink and downlink address pools.** Two address pools were introduced — one for Earth→Antenna and one for Antenna→Earth. Earth toggled between TX and RX mode each loop to listen on the uplink pipes. This still failed because `stopListening()` clears pipe 0 before each write, corrupting the radio state at the moment of transmission.
-
-**Attempt 3 — Permanent TX mode with separate uplink pool.** Earth was locked into TX mode permanently. This fixed the downlink (reset commands arrived at the Antenna) but the uplink address pool became unreachable since Earth was never listening — the ready and taskComplete messages were lost.
-
-**Final solution — ACK payloads, single address pool.** The separate uplink address pool was eliminated entirely. The Antenna loads its responses into the ACK buffer using `writeAckPayload()`. The NRF24L01+ hardware delivers that buffer back to Earth inside the automatic ACK on every ping — no Antenna transmission, no mode switching, no pipe conflicts. Earth stays in TX mode permanently and reads ACK payloads after each `radio.write()`.
